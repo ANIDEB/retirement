@@ -91,14 +91,18 @@ def test_dividends_non_reinvest_no_extra_holding(scenario):
     assert cash_holdings[0].is_new_dividend_cash is True
 
 
-def test_dividends_non_reinvest_merges_into_existing_cash(scenario):
-    """Equity dividend merges into existing CASH in the same account."""
-    equity = make_holding(account_name="OTHER_ACC", ticker="VFIAX", qty=100.0, price=100.0)
-    existing_cash = make_holding(account_name="OTHER_ACC", ticker="CASH", qty=500.0, price=1.0, cost_basis=500.0)
+def test_dividends_non_reinvest_creates_new_cash_alongside_existing(scenario):
+    """Equity dividend creates a separate is_new_dividend_cash=True holding; existing CASH not merged."""
+    # Use TAX_DEFRD (rate=0) so existing CASH earns no interest — isolates the equity dividend effect.
+    equity = make_holding(account_name="OTHER_ACC", account_type="TAX_DEFRD", ticker="VFIAX", qty=100.0, price=100.0)
+    existing_cash = make_holding(account_name="OTHER_ACC", account_type="TAX_DEFRD", ticker="CASH", qty=500.0, price=1.0, cost_basis=500.0)
     updated, records, taxable = calculate_dividends([equity, existing_cash], 2026, scenario)
-    cash = next(x for x in updated if x.ticker == "CASH")
-    assert cash.qty > 500.0
-    assert cash.is_new_dividend_cash is False  # merged into existing, not new
+    cash_holdings = [x for x in updated if x.ticker == "CASH"]
+    assert len(cash_holdings) == 2  # existing + new dividend cash (not merged)
+    old_cash = next(c for c in cash_holdings if not c.is_new_dividend_cash)
+    new_cash = next(c for c in cash_holdings if c.is_new_dividend_cash)
+    assert old_cash.qty == 500.0  # existing not touched by equity dividend
+    assert new_cash.qty > 0       # new dividend amount kept separate
 
 
 def test_dividends_cash_ticker_interest_stays_in_holding(scenario):

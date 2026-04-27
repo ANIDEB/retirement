@@ -93,35 +93,21 @@ def calculate_dividends(
             if div_amount > 0:
                 cash_additions[h.account_name] = cash_additions.get(h.account_name, 0.0) + div_amount
 
-    # Merge equity-dividend cash into existing CASH holdings or create new flagged ones
-    if cash_additions:
-        merged: list[Holding] = []
-        absorbed: set[str] = set()
-
-        for h in updated:
-            if h.ticker == "CASH" and h.account_name in cash_additions:
-                add = cash_additions[h.account_name]
-                merged.append(replace(h, qty=h.qty + add, cost_basis_total=h.cost_basis_total + add))
-                absorbed.add(h.account_name)
-            else:
-                merged.append(h)
-
-        # Accounts with no existing CASH holding get a new one flagged as dividend cash
-        for acct, add in cash_additions.items():
-            if acct not in absorbed:
-                src = next(h for h in updated if h.account_name == acct)
-                merged.append(Holding(
-                    account_name=src.account_name,
-                    owner=src.owner,
-                    counterparty=src.counterparty,
-                    account_type=src.account_type,
-                    ticker="CASH",
-                    qty=add,
-                    price=1.0,
-                    cost_basis_total=add,
-                    is_new_dividend_cash=True,
-                ))
-
-        updated = merged
+    # Create a new is_new_dividend_cash=True CASH holding for each account with equity dividends.
+    # Never merge into an existing CASH holding in the same year — merging happens at the
+    # start of the next year inside apply_growth so there is no double-counting in the output.
+    for acct, add in cash_additions.items():
+        src = next(h for h in updated if h.account_name == acct)
+        updated.append(Holding(
+            account_name=src.account_name,
+            owner=src.owner,
+            counterparty=src.counterparty,
+            account_type=src.account_type,
+            ticker="CASH",
+            qty=add,
+            price=1.0,
+            cost_basis_total=add,
+            is_new_dividend_cash=True,
+        ))
 
     return updated, dividend_records, taxable_income
