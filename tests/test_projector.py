@@ -65,3 +65,18 @@ def test_snapshot_has_dividend_records():
     s = make_scenario(projection_years=2)
     snaps = run_projection(_portfolio(), s)
     assert len(snaps[0].dividend_records) > 0
+
+
+def test_snapshot_has_transactions_after_retirement():
+    s = make_scenario(ani_retirement_year=2027, projection_years=5)
+    snaps = run_projection(_portfolio(), s)
+    post = [sn for sn in snaps if sn.ani_retired]
+    assert any(len(sn.transactions) > 0 for sn in post)
+
+
+def test_snapshot_nup_salary_when_ani_retired_nup_not():
+    s = make_scenario(ani_retirement_year=2027, nup_retirement_year=2030, projection_years=5)
+    snaps = run_projection(_portfolio(), s)
+    snap_2028 = snaps[2]
+    assert snap_2028.ani_retired and not snap_2028.nup_retired
+    assert snap_2028.nup_salary == 50_000

@@ -3,6 +3,7 @@ from retirement.engine.medical import (
     get_expenses,
     get_medical_oop,
     calculate_medical_premium,
+    calculate_medical_premium_detail,
     _person_premium,
 )
 from tests.conftest import make_scenario
@@ -103,3 +104,15 @@ def test_calculate_medical_premium_ani_on_medicare(scenario):
     ani_premium = (185 + 74 + 35 + 12.9) * 12
     nup_premium = 12_000.0
     assert abs(premium - (ani_premium + nup_premium)) < 0.01
+
+
+def test_calculate_medical_premium_detail_returns_separate(scenario):
+    ani, nup = calculate_medical_premium_detail(65, 62, True, True, scenario)
+    total = calculate_medical_premium(65, 62, True, True, scenario)
+    assert abs(ani + nup - total) < 0.01
+
+
+def test_calculate_medical_premium_detail_both_employed(scenario):
+    ani, nup = calculate_medical_premium_detail(60, 57, False, False, scenario)
+    assert ani == 0.0
+    assert nup == 0.0

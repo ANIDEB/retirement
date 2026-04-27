@@ -49,3 +49,17 @@ def calculate_medical_premium(
     ani_premium = _person_premium(ani_age, not ani_retired, scenario.medical, uninsured_monthly)
     nup_premium = _person_premium(nup_age, not nup_retired, scenario.medical, uninsured_monthly)
     return ani_premium + nup_premium
+
+
+def calculate_medical_premium_detail(
+    ani_age: int,
+    nup_age: int,
+    ani_retired: bool,
+    nup_retired: bool,
+    scenario: Scenario,
+) -> tuple[float, float]:
+    """Returns (ani_premium, nup_premium) separately."""
+    uninsured_monthly = scenario.medical.insurance_monthly_per_person_if_uninsured
+    ani = _person_premium(ani_age, not ani_retired, scenario.medical, uninsured_monthly)
+    nup = _person_premium(nup_age, not nup_retired, scenario.medical, uninsured_monthly)
+    return ani, nup

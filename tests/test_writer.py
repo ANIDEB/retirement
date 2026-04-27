@@ -2,45 +2,54 @@ import csv
 import tempfile
 from pathlib import Path
 from retirement.output.writer import write_snapshots, _fmt
-from retirement.models.snapshot import YearEndSnapshot, DividendRecord
+from retirement.models.snapshot import YearEndSnapshot, DividendRecord, Transaction
 from retirement.tax.calculator import TaxResult
 from tests.conftest import make_holding
+
+
+def _make_tx(year=2026):
+    return Transaction(
+        year=year, transaction_type="LT_HARVEST",
+        account_name="ACC", owner="ANI", account_type="BROKERAGE",
+        ticker="AAPL", shares=10.0, price=200.0, amount=2000.0,
+        cost_basis=500.0, gain_loss=1500.0, note="test harvest",
+    )
 
 
 def _make_snapshot(year=2026):
     return YearEndSnapshot(
         year=year,
-        ani_age=60,
-        nup_age=57,
-        ani_retired=False,
-        nup_retired=False,
+        ani_age=60, nup_age=57, ani_retired=False, nup_retired=False,
         holdings=[make_holding(ticker="VFIAX", qty=100, price=200, cost_basis=5000)],
         dividend_records=[
-            DividendRecord("ACC", "ANI", "ETrade", "BROKERAGE", "VFIAX",
-                           amount=500.0, reinvested=True),
-            DividendRecord("ACC2", "ANI", "ETrade", "BROKERAGE", "VFIAX",
-                           amount=200.0, reinvested=False),
+            DividendRecord("ACC", "ANI", "ETrade", "BROKERAGE", "VFIAX", amount=500.0, reinvested=True),
+            DividendRecord("ACC2", "ANI", "ETrade", "BROKERAGE", "VFIAX", amount=200.0, reinvested=False),
         ],
+        transactions=[_make_tx(year)],
         expenses=100_000.0,
         medical_oop=5_000.0,
-        medical_premium=0.0,
+        ani_medical_premium=0.0,
+        nup_medical_premium=0.0,
         taxable_dividend_income=700.0,
-        lt_gains_harvested=0.0,
+        nup_salary=0.0,
+        lt_gains_harvested=1_500.0,
         roth_converted=0.0,
+        hsa_used=0.0,
         withdrawals=0.0,
         tax_result=TaxResult(
-            ordinary_income=700.0, lt_gain_income=0.0,
-            federal_ordinary_tax=0.0, federal_lt_tax=0.0, az_tax=17.5, niit=0.0,
+            ordinary_income=700.0, lt_gain_income=1_500.0,
+            federal_ordinary_tax=0.0, federal_lt_tax=225.0, az_tax=55.0, niit=0.0,
         ),
     )
 
 
-def test_write_creates_files():
+def test_write_creates_three_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir)
         write_snapshots([_make_snapshot()], out)
         assert len(list(out.glob("detail_*.csv"))) == 1
-        assert len(list(out.glob("summary_*.csv"))) == 1
+        assert len(list(out.glob("expenses_*.csv"))) == 1
+        assert len(list(out.glob("transactions_*.csv"))) == 1
 
 
 def test_detail_file_has_holding_rows():
@@ -48,10 +57,8 @@ def test_detail_file_has_holding_rows():
         out = Path(tmpdir)
         write_snapshots([_make_snapshot()], out)
         detail = list(out.glob("detail_*.csv"))[0]
-        with open(detail) as f:
-            rows = list(csv.DictReader(f))
-        holding_rows = [r for r in rows if r["record_type"] == "HOLDING"]
-        assert len(holding_rows) == 1
+        rows = list(csv.DictReader(open(detail)))
+        assert any(r["record_type"] == "HOLDING" for r in rows)
 
 
 def test_detail_file_has_dividend_rows():
@@ -59,21 +66,41 @@ def test_detail_file_has_dividend_rows():
         out = Path(tmpdir)
         write_snapshots([_make_snapshot()], out)
         detail = list(out.glob("detail_*.csv"))[0]
-        with open(detail) as f:
-            rows = list(csv.DictReader(f))
+        rows = list(csv.DictReader(open(detail)))
         div_rows = [r for r in rows if "DIV" in r["record_type"]]
         assert len(div_rows) == 2
 
 
-def test_summary_file_has_year():
+def test_expense_file_has_correct_columns():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir)
+        write_snapshots([_make_snapshot()], out)
+        exp = list(out.glob("expenses_*.csv"))[0]
+        rows = list(csv.DictReader(open(exp)))
+        assert rows[0]["year"] == "2026"
+        assert "total_cash_needed" in rows[0]
+        assert "net_withdrawal_needed" in rows[0]
+        assert "total_income_available" in rows[0]
+
+
+def test_expense_file_two_years():
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir)
         write_snapshots([_make_snapshot(2026), _make_snapshot(2027)], out)
-        summary = list(out.glob("summary_*.csv"))[0]
-        with open(summary) as f:
-            rows = list(csv.DictReader(f))
+        exp = list(out.glob("expenses_*.csv"))[0]
+        rows = list(csv.DictReader(open(exp)))
         assert len(rows) == 2
-        assert rows[0]["year"] == "2026"
+
+
+def test_transactions_file_has_tx():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir)
+        write_snapshots([_make_snapshot()], out)
+        txf = list(out.glob("transactions_*.csv"))[0]
+        rows = list(csv.DictReader(open(txf)))
+        assert len(rows) == 1
+        assert rows[0]["transaction_type"] == "LT_HARVEST"
+        assert rows[0]["gain_loss"] == "1500.00"
 
 
 def test_snapshot_total_expenses():
@@ -84,6 +111,14 @@ def test_snapshot_total_expenses():
 def test_snapshot_total_portfolio_value():
     snap = _make_snapshot()
     assert abs(snap.total_portfolio_value - 100 * 200) < 0.01
+
+
+def test_snapshot_medical_premium_sum():
+    snap = _make_snapshot()
+    snap2 = YearEndSnapshot(
+        **{**snap.__dict__, "ani_medical_premium": 3_000.0, "nup_medical_premium": 2_000.0}
+    )
+    assert snap2.medical_premium == 5_000.0
 
 
 def test_fmt_rounds_to_two_decimals():

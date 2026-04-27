@@ -2,10 +2,10 @@ from __future__ import annotations
 from datetime import date
 from retirement.models.holding import Holding
 from retirement.models.scenario import Scenario
-from retirement.models.snapshot import YearEndSnapshot
+from retirement.models.snapshot import Transaction, YearEndSnapshot
 from retirement.engine.growth import apply_growth
 from retirement.engine.dividends import calculate_dividends
-from retirement.engine.medical import get_expenses, get_medical_oop, calculate_medical_premium
+from retirement.engine.medical import get_expenses, get_medical_oop, calculate_medical_premium_detail
 from retirement.engine.lt_harvesting import harvest_lt_gains
 from retirement.engine.roth_conversion import do_roth_conversion
 from retirement.engine.withdrawal import withdraw_from_hsa, withdraw_funds
@@ -48,31 +48,39 @@ def run_projection(
         # 2. Dividends / interest
         current, div_records, taxable_div = calculate_dividends(current, year, scenario)
 
-        # 3. Expense and medical figures (in nominal dollars for this year)
+        # 3. Expense and medical figures (nominal dollars for this year)
         expenses = get_expenses(year, scenario, run_year)
         medical_oop = get_medical_oop(year, scenario, run_year)
-        medical_premium = calculate_medical_premium(ani_age, nup_age, ani_retired, nup_retired, scenario)
+        ani_premium, nup_premium = calculate_medical_premium_detail(
+            ani_age, nup_age, ani_retired, nup_retired, scenario
+        )
 
         lt_harvested = 0.0
         roth_converted = 0.0
         tax_result = _zero_tax()
+        hsa_used = 0.0
         total_withdrawn = 0.0
+        nup_salary = 0.0
+        all_transactions: list[Transaction] = []
 
         if not ani_retired:
-            # All expenses covered by salary; no withdrawals or conversions needed
-            pass
+            pass  # all expenses covered by salary; no portfolio activity needed
         else:
             nup_salary = scenario.nup.assumed_salary_when_ani_retired if not nup_retired else 0.0
 
-            # 4. LT gain harvesting (brokerage gains within 15% bracket / NIIT limit)
+            # 4. LT gain harvesting
             ordinary_taxable = max(0.0, taxable_div + nup_salary)
-            current, lt_harvested = harvest_lt_gains(current, ordinary_taxable, scenario)
+            current, lt_harvested, lt_txs = harvest_lt_gains(current, ordinary_taxable, scenario, year)
+            all_transactions.extend(lt_txs)
 
             # 5. Roth conversion (fill 22% bracket)
-            ordinary_before_conversion = taxable_div + nup_salary + lt_harvested
-            current, roth_converted = do_roth_conversion(current, ordinary_before_conversion, scenario)
+            ordinary_before_conv = taxable_div + nup_salary + lt_harvested
+            current, roth_converted, roth_txs = do_roth_conversion(
+                current, ordinary_before_conv, scenario, year
+            )
+            all_transactions.extend(roth_txs)
 
-            # 6. Tax on investment activity (dividends + LT gains + Roth conversion + NUP salary)
+            # 6. Tax on investment activity
             total_ordinary = taxable_div + roth_converted + nup_salary
             net_inv_income = taxable_div + lt_harvested
             tax_result = calculate_tax_mfj(
@@ -81,21 +89,24 @@ def run_projection(
                 net_investment_income=net_inv_income,
             )
 
-            # 7. Withdrawal needed after accounting for investment income and salary
+            # 7. Determine withdrawal needed
             income_available = nup_salary + taxable_div + lt_harvested
-            total_needed = expenses + medical_premium + tax_result.total_tax
+            total_needed = expenses + ani_premium + nup_premium + tax_result.total_tax
             after_income = max(0.0, total_needed - income_available)
 
-            # HSA covers medical costs (out-of-pocket + premium) when both are retired
             if both_retired:
-                hsa_needed = medical_oop + medical_premium
-                current, hsa_withdrawn = withdraw_from_hsa(current, hsa_needed)
-                after_income = max(0.0, after_income - hsa_withdrawn)
+                # HSA covers medical OOP + premium when both retired
+                hsa_needed = medical_oop + ani_premium + nup_premium
+                current, hsa_used, hsa_txs = withdraw_from_hsa(current, hsa_needed, year)
+                all_transactions.extend(hsa_txs)
+                # Reduce what still needs to come from regular accounts
+                after_income = max(0.0, after_income - hsa_used)
             else:
-                # Medical OOP covered by salary; add it to the non-HSA withdrawal need
+                # Medical OOP covered by salary; include in what must be withdrawn
                 after_income = max(0.0, after_income + medical_oop)
 
-            current, total_withdrawn = withdraw_funds(current, after_income)
+            current, total_withdrawn, wd_txs = withdraw_funds(current, after_income, year)
+            all_transactions.extend(wd_txs)
 
         snapshots.append(
             YearEndSnapshot(
@@ -106,12 +117,16 @@ def run_projection(
                 nup_retired=nup_retired,
                 holdings=list(current),
                 dividend_records=div_records,
+                transactions=all_transactions,
                 expenses=expenses,
                 medical_oop=medical_oop,
-                medical_premium=medical_premium,
+                ani_medical_premium=ani_premium,
+                nup_medical_premium=nup_premium,
                 taxable_dividend_income=taxable_div,
+                nup_salary=nup_salary,
                 lt_gains_harvested=lt_harvested,
                 roth_converted=roth_converted,
+                hsa_used=hsa_used,
                 withdrawals=total_withdrawn,
                 tax_result=tax_result,
             )
