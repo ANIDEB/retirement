@@ -81,14 +81,16 @@ def test_detail_skips_new_dividend_cash_holdings():
         assert len(holding_rows) == len(snap.holdings)
 
 
-def test_detail_file_has_dividend_rows():
+def test_detail_file_has_div_cash_rows_only():
+    """DIV_REINVESTED is suppressed from detail file; only DIV_CASH rows appear."""
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir)
         write_snapshots([_make_snapshot()], out)
         detail = list(out.glob("detail_*.csv"))[0]
         rows = list(csv.DictReader(open(detail)))
         div_rows = [r for r in rows if "DIV" in r["record_type"]]
-        assert len(div_rows) == 2
+        assert len(div_rows) == 1  # only the DIV_CASH record (reinvested suppressed)
+        assert div_rows[0]["record_type"] == "DIV_CASH"
 
 
 def test_expense_file_has_correct_columns():

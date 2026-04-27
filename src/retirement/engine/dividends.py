@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import date
 from retirement.models.holding import Holding
 from retirement.models.scenario import Scenario
-from retirement.models.snapshot import DividendRecord
+from retirement.models.snapshot import DividendRecord, Transaction
 
 DIVIDEND_MONTHS: tuple[int, ...] = (1, 4, 7, 10)
 
@@ -30,7 +30,7 @@ def calculate_dividends(
     year: int,
     scenario: Scenario,
     base_holdings: list[Holding] | None = None,
-) -> tuple[list[Holding], list[DividendRecord], float]:
+) -> tuple[list[Holding], list[DividendRecord], list[Transaction], float]:
     """
     Apply dividends/interest for the year.
 
@@ -46,7 +46,7 @@ def calculate_dividends(
       CASH holding is created and flagged is_new_dividend_cash=True so the writer
       shows it only as a DIV record (not a duplicate HOLDING row).
 
-    Returns updated_holdings, dividend_records, taxable_dividend_income.
+    Returns updated_holdings, dividend_records, reinvest_transactions, taxable_dividend_income.
     """
     run_date = date.fromisoformat(scenario.run_date)
     fraction = quarters_remaining(run_date, year) / 4.0
@@ -56,14 +56,15 @@ def calculate_dividends(
 
     updated: list[Holding] = []
     dividend_records: list[DividendRecord] = []
+    reinvest_transactions: list[Transaction] = []
     taxable_income = 0.0
-    # Accumulate cash additions per account for equity dividends
     cash_additions: dict[str, float] = {}  # account_name -> total cash to add
 
     for h, base_h in zip(holdings, base):
         rate = get_dividend_rate(h, year, scenario)
         div_amount = base_h.amount * rate * fraction  # use pre-growth value for amount
         is_cash = h.ticker in ("CASH", "HYCASH")
+        reinvest = h.account_name in reinvest_set
 
         if div_amount > 0:
             dividend_records.append(DividendRecord(
@@ -73,7 +74,7 @@ def calculate_dividends(
                 account_type=h.account_type,
                 ticker=h.ticker,
                 amount=div_amount,
-                reinvested=h.account_name in reinvest_set,
+                reinvested=reinvest,
             ))
             if h.dividends_taxable:
                 taxable_income += div_amount
@@ -84,10 +85,24 @@ def calculate_dividends(
                 updated.append(replace(h, qty=h.qty + div_amount, cost_basis_total=h.cost_basis_total + div_amount))
             else:
                 updated.append(h)
-        elif h.account_name in reinvest_set and div_amount > 0:
-            # Buy more shares at year-end price
+        elif reinvest and div_amount > 0:
+            # Buy more shares at year-end price; record the transaction for the audit trail
             new_shares = div_amount / h.price if h.price > 0 else 0.0
             updated.append(replace(h, qty=h.qty + new_shares, cost_basis_total=h.cost_basis_total + div_amount))
+            reinvest_transactions.append(Transaction(
+                year=year,
+                transaction_type="DIV_REINVESTED",
+                account_name=h.account_name,
+                owner=h.owner,
+                account_type=h.account_type,
+                ticker=h.ticker,
+                shares=new_shares,
+                price=h.price,
+                amount=div_amount,
+                cost_basis=div_amount,
+                gain_loss=0.0,
+                note=f"Dividend reinvested — {new_shares:.4f} new shares at {h.price:.2f}",
+            ))
         else:
             updated.append(h)
             if div_amount > 0:
@@ -110,4 +125,4 @@ def calculate_dividends(
             is_new_dividend_cash=True,
         ))
 
-    return updated, dividend_records, taxable_income
+    return updated, dividend_records, reinvest_transactions, taxable_income

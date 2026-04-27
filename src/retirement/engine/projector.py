@@ -47,18 +47,6 @@ def run_projection(
         pre_growth = list(current)
         current = apply_growth(current, year, scenario, fraction)
 
-        # 2. Dividends — amounts based on pre-growth values; reinvestment at year-end price
-        current, div_records, taxable_div = calculate_dividends(
-            current, year, scenario, base_holdings=pre_growth
-        )
-
-        # 3. Expense and medical figures (nominal dollars for this year)
-        expenses = get_expenses(year, scenario, run_year)
-        medical_oop = get_medical_oop(year, scenario, run_year)
-        ani_premium, nup_premium = calculate_medical_premium_detail(
-            ani_age, nup_age, ani_retired, nup_retired, scenario
-        )
-
         lt_harvested = 0.0
         roth_converted = 0.0
         tax_result = _zero_tax()
@@ -66,6 +54,19 @@ def run_projection(
         total_withdrawn = 0.0
         nup_salary = 0.0
         all_transactions: list[Transaction] = []
+
+        # 2. Dividends — amounts based on pre-growth values; reinvestment at year-end price
+        current, div_records, div_txs, taxable_div = calculate_dividends(
+            current, year, scenario, base_holdings=pre_growth
+        )
+        all_transactions.extend(div_txs)
+
+        # 3. Expense and medical figures (nominal dollars for this year)
+        expenses = get_expenses(year, scenario, run_year)
+        medical_oop = get_medical_oop(year, scenario, run_year)
+        ani_premium, nup_premium = calculate_medical_premium_detail(
+            ani_age, nup_age, ani_retired, nup_retired, scenario
+        )
 
         if not ani_retired:
             pass  # all expenses covered by salary; no portfolio activity needed

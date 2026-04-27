@@ -33,9 +33,10 @@ def _write_detail(snapshots: list[YearEndSnapshot], path: Path) -> None:
                     _fmt(h.cost_basis_total), _fmt(h.unrealized_gain),
                 ])
             for dr in snap.dividend_records:
-                label = "DIV_REINVESTED" if dr.reinvested else "DIV_CASH"
+                if dr.reinvested:
+                    continue  # already reflected in HOLDING qty; shown only in transactions file
                 w.writerow([
-                    snap.year, label, dr.account_name, dr.owner, dr.counterparty,
+                    snap.year, "DIV_CASH", dr.account_name, dr.owner, dr.counterparty,
                     dr.account_type, dr.ticker,
                     _fmt(dr.amount), "1.00", _fmt(dr.amount), _fmt(dr.amount), "0.00",
                 ])
