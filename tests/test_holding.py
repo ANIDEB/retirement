@@ -1,3 +1,4 @@
+from dataclasses import replace
 from retirement.models.holding import Holding, TAXABLE_ACCOUNT_TYPES
 
 
@@ -56,3 +57,18 @@ def test_dividends_not_taxable_tax_defrd():
 
 def test_dividends_not_taxable_hsa():
     assert _make(account_type="HSA").dividends_taxable is False
+
+
+def test_is_new_dividend_cash_default_false():
+    assert _make().is_new_dividend_cash is False
+
+
+def test_is_new_dividend_cash_can_be_set():
+    h = replace(_make(), is_new_dividend_cash=True)
+    assert h.is_new_dividend_cash is True
+
+
+def test_is_new_dividend_cash_excluded_from_equality():
+    h1 = _make()
+    h2 = replace(_make(), is_new_dividend_cash=True)
+    assert h1 == h2  # compare=False so flag doesn't affect equality

@@ -3,7 +3,7 @@ from datetime import date
 from retirement.models.holding import Holding
 from retirement.models.scenario import Scenario
 from retirement.models.snapshot import Transaction, YearEndSnapshot
-from retirement.engine.growth import apply_growth
+from retirement.engine.growth import apply_growth, year_growth_fraction
 from retirement.engine.dividends import calculate_dividends
 from retirement.engine.medical import get_expenses, get_medical_oop, calculate_medical_premium_detail
 from retirement.engine.lt_harvesting import harvest_lt_gains
@@ -42,8 +42,9 @@ def run_projection(
         nup_retired = year > scenario.nup.retirement_year
         both_retired = ani_retired and nup_retired
 
-        # 1. Apply price growth
-        current = apply_growth(current, year, scenario)
+        # 1. Apply price growth (prorated for partial first year)
+        fraction = year_growth_fraction(run_date, year)
+        current = apply_growth(current, year, scenario, fraction)
 
         # 2. Dividends / interest
         current, div_records, taxable_div = calculate_dividends(current, year, scenario)

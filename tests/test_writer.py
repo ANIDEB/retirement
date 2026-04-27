@@ -61,6 +61,26 @@ def test_detail_file_has_holding_rows():
         assert any(r["record_type"] == "HOLDING" for r in rows)
 
 
+def test_detail_skips_new_dividend_cash_holdings():
+    from dataclasses import replace as dc_replace
+    snap = _make_snapshot()
+    div_cash_holding = dc_replace(
+        make_holding(ticker="CASH", qty=450, price=1.0, cost_basis=450),
+        is_new_dividend_cash=True,
+    )
+    snap2 = snap.__class__(
+        **{**snap.__dict__, "holdings": snap.holdings + [div_cash_holding]}
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir)
+        write_snapshots([snap2], out)
+        detail = list(out.glob("detail_*.csv"))[0]
+        rows = list(csv.DictReader(open(detail)))
+        holding_rows = [r for r in rows if r["record_type"] == "HOLDING"]
+        # dividend-cash holding should be skipped
+        assert len(holding_rows) == len(snap.holdings)
+
+
 def test_detail_file_has_dividend_rows():
     with tempfile.TemporaryDirectory() as tmpdir:
         out = Path(tmpdir)

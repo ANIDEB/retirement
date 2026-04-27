@@ -16,7 +16,6 @@ def test_quarters_remaining_after_october():
 
 
 def test_quarters_remaining_exactly_on_dividend_month():
-    # April 1 is before April div, so April counts
     assert quarters_remaining(date(2026, 3, 31), 2026) == 3  # Apr, Jul, Oct
 
 
@@ -36,7 +35,6 @@ def test_get_dividend_rate_cash_unknown_type(scenario):
 
 
 def test_get_dividend_rate_custom_override(scenario):
-    from retirement.models.scenario import Scenario
     s = make_scenario(custom_rates_by_year={2026: {"dividend_rates": {"VFIAX": 0.02}}})
     h = make_holding(ticker="VFIAX")
     assert get_dividend_rate(h, 2026, s) == 0.02
@@ -62,20 +60,46 @@ def test_dividends_reinvest_adds_shares(scenario):
     assert taxable > 0  # BROKERAGE is taxable
 
 
-def test_dividends_non_reinvest_creates_cash(scenario):
+def test_dividends_non_reinvest_no_extra_holding(scenario):
+    """Equity dividend in non-reinvest account should NOT create duplicate HOLDING."""
     h = make_holding(account_name="OTHER_ACC", ticker="VFIAX", qty=100.0, price=100.0)
     updated, records, taxable = calculate_dividends([h], 2026, scenario)
-    cash_records = [x for x in updated if x.ticker == "CASH"]
-    assert len(cash_records) == 1
-    assert cash_records[0].qty > 0
+    # The new CASH holding should be flagged — not a second HOLDING
+    cash_holdings = [x for x in updated if x.ticker == "CASH"]
+    assert len(cash_holdings) == 1
+    assert cash_holdings[0].is_new_dividend_cash is True
 
 
-def test_dividends_cash_ticker_reinvested(scenario):
+def test_dividends_non_reinvest_merges_into_existing_cash(scenario):
+    """Equity dividend merges into existing CASH in the same account."""
+    equity = make_holding(account_name="OTHER_ACC", ticker="VFIAX", qty=100.0, price=100.0)
+    existing_cash = make_holding(account_name="OTHER_ACC", ticker="CASH", qty=500.0, price=1.0, cost_basis=500.0)
+    updated, records, taxable = calculate_dividends([equity, existing_cash], 2026, scenario)
+    cash = next(x for x in updated if x.ticker == "CASH")
+    assert cash.qty > 500.0
+    assert cash.is_new_dividend_cash is False  # merged into existing, not new
+
+
+def test_dividends_cash_ticker_interest_stays_in_holding(scenario):
+    """CASH interest always increases the same holding, regardless of reinvest list."""
+    h = make_holding(account_name="ANI_BOA", account_type="SAVINGS", ticker="CASH",
+                     qty=10_000.0, price=1.0)
+    s = make_scenario(custom_rates_by_year={})
+    # set a non-zero savings rate to see it accumulate
+    s.tickers.cash_interest_rates_by_account_type["SAVINGS"] = 0.04
+    updated, records, _ = calculate_dividends([h], 2027, s)
+    cash = next(x for x in updated if x.ticker == "CASH")
+    assert cash.qty > 10_000.0
+    # No duplicate: should be exactly one CASH record for this account
+    assert sum(1 for x in updated if x.account_name == "ANI_BOA" and x.ticker == "CASH") == 1
+
+
+def test_dividends_hycash_interest_reinvested_in_same_holding(scenario):
     h = make_holding(account_name="ANI_AMEX", ticker="HYCASH", account_type="HY_SAVINGS",
-                     qty=10000.0, price=1.0)
+                     qty=10_000.0, price=1.0)
     updated, records, taxable = calculate_dividends([h], 2026, scenario)
     hycash = next(x for x in updated if x.ticker == "HYCASH")
-    assert hycash.qty > 10000.0
+    assert hycash.qty > 10_000.0
 
 
 def test_dividends_zero_rate_no_record(scenario):

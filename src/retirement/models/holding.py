@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 TAXABLE_ACCOUNT_TYPES: frozenset[str] = frozenset({"SAVINGS", "BROKERAGE", "HY_SAVINGS"})
 
@@ -14,6 +14,8 @@ class Holding:
     qty: float
     price: float
     cost_basis_total: float
+    # True only in the year dividends generated this cash — cleared by apply_growth next year
+    is_new_dividend_cash: bool = field(default=False, compare=False, repr=False)
 
     @property
     def amount(self) -> float:

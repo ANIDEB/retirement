@@ -24,6 +24,8 @@ def _write_detail(snapshots: list[YearEndSnapshot], path: Path) -> None:
         w.writerow(_DETAIL_COLS)
         for snap in snapshots:
             for h in snap.holdings:
+                if h.is_new_dividend_cash:
+                    continue  # shown only as DIV_CASH record, not a duplicate HOLDING
                 w.writerow([
                     snap.year, "HOLDING", h.account_name, h.owner, h.counterparty,
                     h.account_type, h.ticker,
