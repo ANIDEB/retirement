@@ -1,0 +1,35 @@
+Here is my project requirements. This application will be used to generate projections for my financial status in retirements.
+- ANI will be turning 60 later this year. NUP will be turning 57 this year.
+- My current asset details are available in current_asset.csv file.
+- default scenario of asset growth will be provided default_scenario.json file.
+- default scenario json file should have default growth rate for each ticker and dividend rate for each ticker.
+- this json file should also have ability to provide custom growth rates and  dividend rates for each year which will overide the default growth rates and dividend rates for that year.
+- this scenario file will also contain projected retirement year. assume we will be retiring end of that year.enario file will also contain total expenses for each year.
+- Medical expenses excludinf premium needs to be available scenario file. which will be covered by salary till one of us are employed.
+- Assume all our expenses will be covered from salary till ANI's retirement and needs to be completely covered from withdrwal after.
+- Medical insurance will be covered employer till one us are employed.
+- Medicare will start at 65 years for both.
+- Medical insurance cost will be assumed 1000 per person per month if medicare and employer provided insurance is not available. medical insurance cost is not included in projected expense provided in scenario file. 
+- scenario file should also contain inflation for yeach year and default inflation. expenses should be adjusted accordingly.
+- The application should be able to read the current asset details from the CSV file and apply the growth rates and dividend rates from the JSON file to project the financial status for the next 30 years.
+- for tax calculation purposes assume I am filing married filining jointly and use federal tax rate for 2026
+- for state tax use Arizona state tax rate for 2026
+- The application should store projected financial status in detail for yeach year in output folder.
+- first column in the current asset file contains a unique identifier for the account. each account can have multiple ticker within it.
+- current asset file also provide type of the asset (e.g. tax deferred, roth, brokerage etc.) for tax calculation purposes.
+- whenever I sell any asset without specificity assume I want to sell the asset with lowest historical return within that category.
+- ticker symbol CASH indicates cash. that means any dividend from any ticker will generate CASH record unless reinvested.
+- dividend or interest from ANI_VAN, ANI_MORGAN, ANI_AMEX and NUP_AMEX will be reinvested in same ticker.
+- dividend income from SAVINGS or BROKERAGE account will be taxable income immediately. for all other accounts tax will be deferred or not taxed.
+- insurance premium and medical expenses after both are retired will be covered from HSA account if available . HSA account will not be used for any other purposes.
+- first calculate medical expenses excluding premium, medical premium expenses and other expenses for each year. This will be used to calculate required withdrawal every year. these details for each year needs to be stored in output file.
+- assume dividend is paid in April, July, October and January only. This information will be useful to calculate dividend of this year which is a part year.
+- for every year end, every account, every ticker calculate price by applying growth rate on previous years price. calculate dividend/interest based on dividend rate in scenario. this dividend should stay as CASH or reinvested to the same ticker same account at the end of the year price and should appear as separate record in output file.
+- output file should have detailed snapshot for each year end.
+- need to build a streamlit interface to display summarized output for each year.
+- for medicare premium , use market information.
+- after ANI retires, brokerage account LT Gain will be encasehed staying within 15% LT Gain tax bracket and not paying any net investment income surcharge.
+- once all the LT gains are taken care of, funds from the tax deferred account will be moved to Roth account under VFAIX at end of the price. This will have tax implecation. Tax deferred to Roth conversion amount will be decided to use complete 22% tax bracket of that tax year.
+- for tax calculation purposes, if ANI is retired and NUP is not required assume NUP is earning 50K and paying income tax directly from salary at federal single rate for income, rest needs to be taken care of by ANI.
+- before you start building the code lets first create a skeleton for scenario file and once that is finalized you can start the code.
+- Do not assume anything, Please come back to me if I have missed anything.
