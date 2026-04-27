@@ -93,7 +93,7 @@ def _write_expense_detail(snapshots: list[YearEndSnapshot], path: Path) -> None:
 
 _TX_COLS = [
     "year", "transaction_type", "account_name", "owner", "account_type",
-    "ticker", "shares", "price", "amount", "cost_basis", "gain_loss", "note",
+    "ticker", "shares", "price", "proceeds_or_amount", "cost_basis", "gain_loss", "note",
 ]
 
 
