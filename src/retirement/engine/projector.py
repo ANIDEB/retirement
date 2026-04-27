@@ -44,10 +44,13 @@ def run_projection(
 
         # 1. Apply price growth (prorated for partial first year)
         fraction = year_growth_fraction(run_date, year)
+        pre_growth = list(current)
         current = apply_growth(current, year, scenario, fraction)
 
-        # 2. Dividends / interest
-        current, div_records, taxable_div = calculate_dividends(current, year, scenario)
+        # 2. Dividends — amounts based on pre-growth values; reinvestment at year-end price
+        current, div_records, taxable_div = calculate_dividends(
+            current, year, scenario, base_holdings=pre_growth
+        )
 
         # 3. Expense and medical figures (nominal dollars for this year)
         expenses = get_expenses(year, scenario, run_year)

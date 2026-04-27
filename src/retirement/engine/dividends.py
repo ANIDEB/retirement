@@ -29,9 +29,14 @@ def calculate_dividends(
     holdings: list[Holding],
     year: int,
     scenario: Scenario,
+    base_holdings: list[Holding] | None = None,
 ) -> tuple[list[Holding], list[DividendRecord], float]:
     """
     Apply dividends/interest for the year.
+
+    Dividend amounts are calculated on base_holdings values (beginning-of-year /
+    pre-growth prices). Reinvested shares are purchased at the post-growth prices
+    in holdings. If base_holdings is omitted, holdings is used for both.
 
     Rules:
     - CASH/HYCASH: interest always increases the existing holding (regardless of reinvest list).
@@ -47,15 +52,17 @@ def calculate_dividends(
     fraction = quarters_remaining(run_date, year) / 4.0
     reinvest_set = set(scenario.tickers.reinvest_dividends_accounts)
 
+    base = base_holdings if base_holdings is not None else holdings
+
     updated: list[Holding] = []
     dividend_records: list[DividendRecord] = []
     taxable_income = 0.0
     # Accumulate cash additions per account for equity dividends
     cash_additions: dict[str, float] = {}  # account_name -> total cash to add
 
-    for h in holdings:
+    for h, base_h in zip(holdings, base):
         rate = get_dividend_rate(h, year, scenario)
-        div_amount = h.amount * rate * fraction
+        div_amount = base_h.amount * rate * fraction  # use pre-growth value for amount
         is_cash = h.ticker in ("CASH", "HYCASH")
 
         if div_amount > 0:

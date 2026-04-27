@@ -60,6 +60,27 @@ def test_dividends_reinvest_adds_shares(scenario):
     assert taxable > 0  # BROKERAGE is taxable
 
 
+def test_dividends_amount_uses_pre_growth_price(scenario):
+    """Dividend amount should use the pre-growth (beginning-of-year) price, not post-growth."""
+    pre = make_holding(ticker="VFIAX", qty=100.0, price=100.0)
+    post = make_holding(ticker="VFIAX", qty=100.0, price=110.0)  # after 10% growth
+    _, records, taxable = calculate_dividends([post], 2027, scenario, base_holdings=[pre])
+    # dividend = 100 * 100 * 0.014 * 1.0 = 140, not 110*100*0.014 = 154
+    assert abs(records[0].amount - 140.0) < 0.01
+    assert abs(taxable - 140.0) < 0.01
+
+
+def test_dividends_reinvest_uses_post_growth_price(scenario):
+    """Reinvested shares should be bought at the post-growth year-end price."""
+    pre = make_holding(account_name="ANI_VAN", ticker="VFIAX", qty=100.0, price=100.0)
+    post = make_holding(account_name="ANI_VAN", ticker="VFIAX", qty=100.0, price=110.0)
+    div_amount = 100.0 * 100.0 * 0.014 * 1.0  # 140 using pre-growth
+    updated, _, _ = calculate_dividends([post], 2027, scenario, base_holdings=[pre])
+    vfiax = next(x for x in updated if x.ticker == "VFIAX")
+    expected_new_shares = div_amount / 110.0  # bought at post-growth price
+    assert abs(vfiax.qty - (100.0 + expected_new_shares)) < 0.001
+
+
 def test_dividends_non_reinvest_no_extra_holding(scenario):
     """Equity dividend in non-reinvest account should NOT create duplicate HOLDING."""
     h = make_holding(account_name="OTHER_ACC", ticker="VFIAX", qty=100.0, price=100.0)
