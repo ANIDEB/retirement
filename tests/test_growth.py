@@ -102,9 +102,12 @@ def test_merge_cash_and_hycash_not_merged():
     assert len(result) == 2
 
 
-def test_merge_cash_preserves_non_cash_holdings():
-    equity = make_holding(account_name="ACC", ticker="VFIAX", qty=100, price=200)
+def test_merge_cash_preserves_order():
+    """CASH must stay in its original position — not moved to the end."""
+    equity1 = make_holding(account_name="ACC", ticker="VFIAX", qty=100, price=200)
     cash = make_holding(account_name="ACC", ticker="CASH", qty=500, price=1.0, cost_basis=500)
-    result = _merge_cash_holdings([equity, cash])
-    assert any(h.ticker == "VFIAX" for h in result)
-    assert any(h.ticker == "CASH" for h in result)
+    equity2 = make_holding(account_name="ACC", ticker="QQQ", qty=50, price=300)
+    result = _merge_cash_holdings([equity1, cash, equity2])
+    assert result[0].ticker == "VFIAX"
+    assert result[1].ticker == "CASH"   # stays in position, not moved to end
+    assert result[2].ticker == "QQQ"

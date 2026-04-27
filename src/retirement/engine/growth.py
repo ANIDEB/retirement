@@ -17,27 +17,32 @@ def year_growth_fraction(run_date: date, year: int) -> float:
 
 def _merge_cash_holdings(holdings: list[Holding]) -> list[Holding]:
     """
-    Merge multiple CASH/HYCASH holdings for the same account into one.
-    Called at the start of each year so accumulated prior-year dividend cash
-    consolidates into a single balance before growth is applied.
+    Merge duplicate CASH/HYCASH holdings for the same account into the first
+    occurrence, preserving the original list order throughout.
+    Called at the start of each year so prior-year dividend cash consolidates
+    into a single balance before growth is applied.
     """
-    non_cash: list[Holding] = []
-    cash_map: dict[tuple[str, str], Holding] = {}
+    result: list[Holding] = []
+    first_idx: dict[tuple[str, str], int] = {}  # (account_name, ticker) -> index in result
+
     for h in holdings:
         if h.ticker in ("CASH", "HYCASH"):
             key = (h.account_name, h.ticker)
-            if key in cash_map:
-                existing = cash_map[key]
-                cash_map[key] = replace(
+            if key in first_idx:
+                idx = first_idx[key]
+                existing = result[idx]
+                result[idx] = replace(
                     existing,
                     qty=existing.qty + h.qty,
                     cost_basis_total=existing.cost_basis_total + h.cost_basis_total,
                 )
             else:
-                cash_map[key] = h
+                first_idx[key] = len(result)
+                result.append(h)
         else:
-            non_cash.append(h)
-    return non_cash + list(cash_map.values())
+            result.append(h)
+
+    return result
 
 
 def get_growth_rate(holding: Holding, year: int, scenario: Scenario) -> float:
