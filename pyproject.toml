@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retirement"
+version = "0.1.0"
+description = "Retirement planning project"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=retirement --cov=main --cov-report=term-missing --cov-fail-under=100"
+
+[tool.coverage.run]
+source = ["src/retirement", "main.py"]
+
+[tool.coverage.report]
+show_missing = true
